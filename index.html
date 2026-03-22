@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Suivi CO</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:#0d1117; --surface:#161b22; --surface2:#21262d; --surface3:#2d333b;
+    --accent:#f97316; --green:#22c55e; --red:#ef4444;
+    --text:#e6edf3; --text2:#8b949e; --border:#30363d;
+    --radius:14px; --shadow:0 8px 32px rgba(0,0,0,0.4);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+
+  .screen{display:none;flex-direction:column;min-height:100vh;animation:fadeIn .25s ease;}
+  .screen.active{display:flex;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+  /* TOPBAR */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;}
+  .topbar-title{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;letter-spacing:.5px;flex:1;}
+  .topbar-sub{font-size:13px;color:var(--text2);}
+  .logo-badge{background:var(--accent);color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;padding:4px 10px;border-radius:8px;letter-spacing:1px;}
+
+  /* BUTTONS */
+  .btn{border:none;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:600;border-radius:var(--radius);transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:8px;-webkit-user-select:none;user-select:none;}
+  .btn:active{transform:scale(.96);opacity:.85;}
+  .btn-primary{background:var(--accent);color:#fff;padding:12px 22px;font-size:15px;}
+  .btn-secondary{background:var(--surface3);color:var(--text);padding:12px 22px;font-size:15px;border:1px solid var(--border);}
+  .btn-danger{background:var(--red);color:#fff;padding:10px 18px;font-size:14px;}
+  .btn-ghost{background:transparent;color:var(--text2);padding:10px;font-size:15px;border:1px solid var(--border);}
+  .btn-back{background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:10px 14px;font-size:14px;border-radius:10px;}
+  .btn-icon{font-size:18px;width:42px;height:42px;padding:0;border-radius:10px;}
+
+  .content{flex:1;padding:20px;overflow-y:auto;}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  .grid-auto{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;}
+
+  /* HOME CARDS */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden;}
+  .card:active{transform:scale(.97);border-color:var(--accent);}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent);transform:scaleX(0);transition:transform .15s;transform-origin:left;}
+  .card:active::before{transform:scaleX(1);}
+  .card-title{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;margin-bottom:4px;}
+  .card-sub{font-size:12px;color:var(--text2);}
+
+  /* LESSON BTN */
+  .lesson-btn{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;text-align:center;transition:all .15s;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--text);}
+  .lesson-btn:active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .lesson-btn.has-limit{border-color:var(--accent);}
+  .limit-badge{display:inline-block;background:rgba(249,115,22,.15);border:1px solid var(--accent);color:var(--accent);font-size:11px;padding:2px 7px;border-radius:5px;margin-top:5px;}
+
+  /* ══ GROUP BTN ══
+     État repos   : fond surface2, bordure grise
+     En cours     : fond vert léger, bordure verte, NOM vert, CHRONO vert
+     En retard    : fond rouge, bordure rouge, NOM rouge, CHRONO rouge
+  */
+  .group-btn{
+    background:var(--surface2);
+    border:2px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px 12px;
+    cursor:pointer;
+    text-align:center;
+    transition:border-color .2s, background .2s;
+    position:relative;
+    overflow:hidden;
+  }
+  .group-btn:active{transform:scale(.96);}
+
+  /* En cours → vert */
+  .group-btn.running{
+    border-color:var(--green);
+    background:rgba(34,197,94,.07);
+  }
+  .group-btn.running .g-name{ color:var(--green); }
+  .group-btn.running .g-timer{ color:var(--green); }
+  .group-btn.running .g-hint{ color:rgba(34,197,94,.6); }
+
+  /* En retard → rouge (écrase le vert) */
+  .group-btn.overtime{
+    border-color:var(--red) !important;
+    background:rgba(239,68,68,.13) !important;
+  }
+  .group-btn.overtime .g-name{ color:var(--red) !important; }
+  .group-btn.overtime .g-timer{ color:var(--red) !important; }
+  .group-btn.overtime .g-hint{ color:rgba(239,68,68,.6) !important; }
+  .group-btn.overtime .g-status{ color:rgba(239,68,68,.7) !important; }
+
+  .g-name{font-size:16px;font-weight:700;margin-bottom:6px;color:var(--text);transition:color .2s;}
+  .g-status{font-size:11px;color:var(--text2);margin-top:3px;}
+  .g-timer{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;margin-top:4px;transition:color .2s;}
+  .g-hint{font-size:11px;color:var(--text2);margin-top:5px;}
+
+  /* PARCOURS BTN */
+  .parcours-btn{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 10px;cursor:pointer;text-align:center;transition:all .15s;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:var(--text);}
+  .parcours-btn.done{border-color:var(--green);color:var(--green);background:rgba(34,197,94,.08);}
+  .parcours-btn.done.ot{border-color:var(--red);color:var(--red);background:rgba(239,68,68,.08);}
+  .parcours-btn:active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  /* MODAL */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center;}
+  .modal-overlay.active{display:flex;animation:fadeIn .2s ease;}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:28px 24px;width:90%;max-width:440px;box-shadow:var(--shadow);}
+  .modal h3{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;margin-bottom:18px;}
+  .modal label{display:block;font-size:13px;color:var(--text2);margin-bottom:6px;font-weight:600;}
+  .modal input,.modal select{width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:16px;padding:13px 16px;border-radius:10px;margin-bottom:16px;outline:none;}
+  .modal input:focus,.modal select:focus{border-color:var(--accent);}
+  .modal select option{background:var(--surface3);}
+  .modal-btns{display:flex;gap:10px;justify-content:flex-end;}
+
+  /* CHRONO SCREEN */
+  .chrono-display{font-family:'Barlow Condensed',sans-serif;font-size:72px;font-weight:800;color:var(--accent);text-align:center;letter-spacing:2px;padding:30px 0;line-height:1;}
+  .chrono-display.ot{color:var(--red);}
+  .chrono-sub{text-align:center;color:var(--text2);font-size:15px;margin-bottom:10px;}
+  .btn-start{background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;font-size:24px;font-family:'Barlow Condensed',sans-serif;font-weight:800;padding:22px 0;width:100%;border-radius:16px;letter-spacing:2px;border:none;cursor:pointer;transition:all .15s;box-shadow:0 4px 20px rgba(34,197,94,.3);}
+  .btn-start:active{transform:scale(.97);}
+  .btn-stop{background:linear-gradient(135deg,var(--red),#dc2626);color:#fff;font-size:24px;font-family:'Barlow Condensed',sans-serif;font-weight:800;padding:22px 0;width:100%;border-radius:16px;letter-spacing:2px;border:none;cursor:pointer;transition:all .15s;box-shadow:0 4px 20px rgba(239,68,68,.3);}
+  .btn-stop:active{transform:scale(.97);}
+
+  /* RECAP */
+  .recap-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border);}
+  .recap-table{border-collapse:collapse;width:100%;font-size:13px;}
+  .recap-table th{background:var(--surface3);color:var(--text2);padding:10px 12px;text-align:center;border:1px solid var(--border);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;white-space:nowrap;}
+  .recap-table th:first-child{text-align:left;min-width:120px;}
+  .recap-table td{padding:9px 12px;border:1px solid var(--border);text-align:center;color:var(--text2);}
+  .recap-table td:first-child{text-align:left;font-weight:600;color:var(--text);}
+  .recap-table tr:nth-child(even) td{background:rgba(255,255,255,.02);}
+  .t-ok{color:var(--green);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;}
+  .t-ot{color:var(--red);font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;}
+  .t-no{color:var(--surface3);font-size:11px;}
+
+  /* MISC */
+  .empty-state{text-align:center;padding:60px 20px;color:var(--text2);}
+  .empty-state .big{font-size:48px;margin-bottom:12px;}
+  .section-label{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1.5px;color:var(--text2);text-transform:uppercase;margin-bottom:12px;}
+  .action-bar{display:flex;gap:10px;align-items:center;padding:12px 20px;background:var(--surface);border-top:1px solid var(--border);flex-wrap:wrap;}
+  .fin-bar{padding:16px 20px;background:var(--surface);border-top:1px solid var(--border);display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  .alert-ot{background:rgba(239,68,68,.1);border:1px solid var(--red);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--red);font-weight:600;}
+
+  @media(min-width:768px){
+    .content{padding:28px 32px;}
+    .topbar,.action-bar,.fin-bar{padding:18px 32px;}
+    .grid-3{grid-template-columns:repeat(5,1fr);}
+    .grid-auto{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));}
+  }
+</style>
+</head>
+<body>
+
+<!-- SCREEN 1 : ACCUEIL -->
+<div class="screen active" id="screen-home">
+  <div class="topbar">
+    <span class="logo-badge">CO</span>
+    <div style="flex:1"><div class="topbar-title">Suivi CO</div><div class="topbar-sub">Gestion des classes</div></div>
+  </div>
+  <div class="content">
+    <div class="section-label">Mes classes</div>
+    <div id="classes-list"></div>
+  </div>
+  <div class="action-bar">
+    <button class="btn btn-primary" onclick="openAddClass()">＋ Ajouter une classe</button>
+  </div>
+</div>
+
+<!-- SCREEN 2 : LEÇONS -->
+<div class="screen" id="screen-lessons">
+  <div class="topbar">
+    <button class="btn btn-back" onclick="goTo('screen-home')">← Retour</button>
+    <div style="flex:1"><div class="topbar-title" id="lesson-class-title">Classe</div><div class="topbar-sub">Sélectionner une leçon</div></div>
+  </div>
+  <div class="content">
+    <div class="section-label">Leçons</div>
+    <div id="lessons-grid" class="grid-2"></div>
+  </div>
+</div>
+
+<!-- SCREEN 3 : GROUPES -->
+<div class="screen" id="screen-groups">
+  <div class="topbar">
+    <button class="btn btn-back" onclick="goTo('screen-lessons')">← Retour</button>
+    <div style="flex:1"><div class="topbar-title" id="groups-title">Leçon</div><div class="topbar-sub" id="groups-sub">Classe</div></div>
+    <div id="tl-badge"></div>
+  </div>
+  <div class="content">
+    <div class="section-label">Groupes</div>
+    <div id="groups-grid" class="grid-auto"></div>
+  </div>
+  <div class="fin-bar">
+    <button class="btn btn-primary" onclick="openAddGroup()">＋ Ajouter un groupe</button>
+    <button class="btn btn-danger" onclick="finLecon()">🏁 Fin de leçon</button>
+  </div>
+</div>
+
+<!-- SCREEN 4 : PARCOURS -->
+<div class="screen" id="screen-parcours">
+  <div class="topbar">
+    <button class="btn btn-back" onclick="goTo('screen-groups')">← Retour</button>
+    <div style="flex:1"><div class="topbar-title" id="parcours-title">Groupe</div><div class="topbar-sub">Choisir un parcours</div></div>
+  </div>
+  <div class="content">
+    <div class="section-label">Parcours disponibles</div>
+    <div id="parcours-grid" class="grid-3"></div>
+  </div>
+</div>
+
+<!-- SCREEN 5 : CHRONO -->
+<div class="screen" id="screen-chrono">
+  <div class="topbar">
+    <button class="btn btn-back" id="chrono-back" onclick="goTo('screen-parcours')">← Retour</button>
+    <div style="flex:1"><div class="topbar-title" id="chrono-group">Groupe</div><div class="topbar-sub" id="chrono-parcours">Parcours</div></div>
+  </div>
+  <div class="content" style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;">
+    <div class="chrono-sub" id="chrono-label">Prêt à démarrer</div>
+    <div class="chrono-display" id="chrono-display">00:00.0</div>
+    <div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;">
+      <button class="btn-start" id="btn-start" onclick="startChrono()">▶ START</button>
+      <button class="btn-stop" id="btn-stop" onclick="stopChrono()" style="display:none;">⬛ STOP</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 6 : RÉCAP -->
+<div class="screen" id="screen-recap">
+  <div class="topbar">
+    <button class="btn btn-back" onclick="goTo('screen-groups')">← Leçon</button>
+    <div style="flex:1"><div class="topbar-title">Récapitulatif</div><div class="topbar-sub" id="recap-sub">Fin de leçon</div></div>
+    <button class="btn btn-secondary" onclick="exportRecap()" style="font-size:13px;padding:8px 14px;">📋 Copier</button>
+  </div>
+  <div class="content"><div id="recap-container"></div></div>
+  <div class="action-bar">
+    <button class="btn btn-primary" onclick="goTo('screen-groups')">↩ Retour à la leçon</button>
+    <button class="btn btn-danger" onclick="openModal('modal-reset')">🗑 Effacer</button>
+  </div>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<div class="modal-overlay" id="modal-class">
+  <div class="modal">
+    <h3 id="modal-class-h">Nouvelle classe</h3>
+    <label>Nom de la classe</label>
+    <input type="text" id="input-class" placeholder="Ex: 5ème A" maxlength="30">
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeModal('modal-class')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveClass()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-del-class">
+  <div class="modal">
+    <h3>Supprimer la classe ?</h3>
+    <p style="color:var(--text2);margin-bottom:20px;font-size:15px;">Toutes les données seront supprimées.</p>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeModal('modal-del-class')">Annuler</button>
+      <button class="btn btn-danger" onclick="confirmDeleteClass()">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-lesson">
+  <div class="modal">
+    <h3 id="modal-lesson-h">Leçon</h3>
+    <label>Temps limite par parcours (optionnel)</label>
+    <select id="input-timelimit">
+      <option value="0">Aucun temps limite</option>
+      <option value="1">1 minute</option>
+      <option value="2">2 minutes</option>
+      <option value="3">3 minutes</option>
+      <option value="4">4 minutes</option>
+      <option value="5">5 minutes</option>
+      <option value="6">6 minutes</option>
+      <option value="7">7 minutes</option>
+      <option value="8">8 minutes</option>
+      <option value="9">9 minutes</option>
+      <option value="10">10 minutes</option>
+      <option value="12">12 minutes</option>
+      <option value="15">15 minutes</option>
+      <option value="20">20 minutes</option>
+      <option value="25">25 minutes</option>
+      <option value="30">30 minutes</option>
+      <option value="45">45 minutes</option>
+      <option value="60">60 minutes</option>
+    </select>
+    <p style="font-size:12px;color:var(--text2);margin-top:-10px;margin-bottom:16px;">Si un groupe dépasse ce temps, sa case passe au rouge et remonte en premier.</p>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeModal('modal-lesson')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveLessonConfig()">Ouvrir la leçon</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-group">
+  <div class="modal">
+    <h3>Nom du groupe</h3>
+    <input type="text" id="input-group" placeholder="Ex: Les Aigles, Équipe 1…" maxlength="25">
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeModal('modal-group')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveGroup()">Créer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-stop">
+  <div class="modal">
+    <h3>Arrêter le chronomètre ?</h3>
+    <div class="chrono-display" id="modal-stop-time" style="font-size:48px;padding:14px 0;"></div>
+    <p style="color:var(--text2);margin-bottom:16px;font-size:15px;" id="modal-stop-info"></p>
+    <div id="modal-stop-ot" style="display:none;margin-bottom:16px;">
+      <span style="background:rgba(239,68,68,.15);border:1px solid var(--red);color:var(--red);font-size:13px;font-weight:700;padding:5px 14px;border-radius:8px;">⚠️ TEMPS LIMITE DÉPASSÉ</span>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeModal('modal-stop')">Continuer</button>
+      <button class="btn btn-danger" onclick="confirmStop()">Confirmer STOP</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-reset">
+  <div class="modal">
+    <h3>Effacer les données ?</h3>
+    <p style="color:var(--text2);margin-bottom:20px;font-size:15px;">Tous les temps et groupes seront supprimés. Irréversible.</p>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeModal('modal-reset')">Annuler</button>
+      <button class="btn btn-danger" onclick="doReset()">Effacer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══ STATE ══
+let S = {
+  classes:[], lessons:{},
+  classId:null, lessonId:null, groupId:null, parcoursId:null,
+  editClassId:null, delClassId:null, pendingLesson:null,
+};
+let liveIv = null;
+
+function save(){ try{localStorage.setItem('suivico_v5',JSON.stringify(S));}catch(e){} }
+function load(){ try{const d=localStorage.getItem('suivico_v5');if(d)S={...S,...JSON.parse(d)};}catch(e){} }
+
+// ══ NAV ══
+function goTo(id){
+  clearInterval(liveIv);
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+  if(id==='screen-home')      renderHome();
+  else if(id==='screen-lessons')  renderLessons();
+  else if(id==='screen-groups')   renderGroups();
+  else if(id==='screen-parcours') renderParcours();
+  else if(id==='screen-recap')    renderRecap();
+}
+
+// ══ HELPERS ══
+function lesson(){ return (S.lessons[S.classId]||[]).find(l=>l.id===S.lessonId); }
+function isOT(ms,l){ return l&&l.tlMin>0&&ms>l.tlMin*60000; }
+function fmt(ms){
+  const s=ms/1000,m=Math.floor(s/60),sec=Math.floor(s%60),t=Math.floor((ms%1000)/100);
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${t}`;
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function openModal(id){ document.getElementById(id).classList.add('active'); }
+function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('active');}));
+
+function totalTime(gid,l){
+  const vals=Object.values(l.results[gid]||{});
+  return vals.length?vals.reduce((a,b)=>a+b,0):-1;
+}
+
+// ══ ORDRE D'AFFICHAGE DES GROUPES ══
+// Catégorie 0 : En attente/terminé — gris (jamais démarré OU arrêté)
+// Catégorie 1 : En retard          — rouge (chrono actif ET temps dépassé)
+// Catégorie 2 : À l'heure          — vert  (chrono actif ET dans les temps)
+// Dans chaque catégorie : temps le plus grand en premier
+function sortedGroups(l){
+  const now = Date.now();
+
+  const category = g => {
+    if(!g.running) return 0;                      // attente ou terminé
+    if(isOT(now - g.startTime, l)) return 1;      // en retard
+    return 2;                                      // à l'heure
+  };
+
+  const timeVal = g => {
+    if(g.running) return now - g.startTime;
+    const tt = totalTime(g.id, l);
+    return tt >= 0 ? tt : 0;
+  };
+
+  return [...l.groups].sort((a,b)=>{
+    const ca = category(a), cb = category(b);
+    if(ca !== cb) return ca - cb;
+    return timeVal(b) - timeVal(a);
+  });
+}
+
+// ══ HOME ══
+function renderHome(){
+  const el=document.getElementById('classes-list');
+  if(!S.classes.length){
+    el.innerHTML=`<div class="empty-state"><div class="big">🏃</div><p>Aucune classe.<br>Appuyez sur "Ajouter une classe".</p></div>`;
+    return;
+  }
+  el.innerHTML=S.classes.map(c=>{
+    const n=(S.lessons[c.id]||[]).length;
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <div class="card" style="flex:1" onclick="openClass('${c.id}')">
+        <div class="card-title">${esc(c.name)}</div>
+        <div class="card-sub">${n} leçon${n!==1?'s':''}</div>
+      </div>
+      <button class="btn btn-ghost btn-icon" onclick="openEditClass('${c.id}')">✏️</button>
+      <button class="btn btn-ghost btn-icon" style="color:var(--red);border-color:var(--red);" onclick="openDelClass('${c.id}')">🗑</button>
+    </div>`;
+  }).join('');
+}
+function openClass(id){ S.classId=id; goTo('screen-lessons'); }
+
+// ══ CLASSES ══
+function openAddClass(){ S.editClassId=null; document.getElementById('modal-class-h').textContent='Nouvelle classe'; document.getElementById('input-class').value=''; openModal('modal-class'); setTimeout(()=>document.getElementById('input-class').focus(),300); }
+function openEditClass(id){ S.editClassId=id; const c=S.classes.find(x=>x.id===id); document.getElementById('modal-class-h').textContent='Modifier'; document.getElementById('input-class').value=c.name; openModal('modal-class'); setTimeout(()=>document.getElementById('input-class').focus(),300); }
+function saveClass(){
+  const n=document.getElementById('input-class').value.trim(); if(!n)return;
+  if(S.editClassId) S.classes.find(x=>x.id===S.editClassId).name=n;
+  else S.classes.push({id:'c_'+Date.now(),name:n});
+  save(); closeModal('modal-class'); renderHome();
+}
+function openDelClass(id){ S.delClassId=id; openModal('modal-del-class'); }
+function confirmDeleteClass(){ S.classes=S.classes.filter(x=>x.id!==S.delClassId); delete S.lessons[S.delClassId]; save(); closeModal('modal-del-class'); renderHome(); }
+document.getElementById('input-class').addEventListener('keydown',e=>{ if(e.key==='Enter')saveClass(); });
+
+// ══ LEÇONS ══
+function renderLessons(){
+  const cls=S.classes.find(c=>c.id===S.classId); if(!cls)return;
+  document.getElementById('lesson-class-title').textContent=cls.name;
+  const grid=document.getElementById('lessons-grid'); grid.innerHTML='';
+  for(let i=1;i<=10;i++){
+    const l=(S.lessons[S.classId]||[]).find(x=>x.lessonNum===i);
+    const gc=l?l.groups.length:0, hasL=l&&l.tlMin>0;
+    const btn=document.createElement('div');
+    btn.className='lesson-btn'+(hasL?' has-limit':'');
+    btn.innerHTML=`<div style="font-size:22px;margin-bottom:4px;">Leçon ${i}</div>
+      <div style="font-size:12px;color:var(--text2);font-weight:400;">${gc?gc+' groupe'+(gc>1?'s':''):'Aucun groupe'}</div>
+      ${hasL?`<div class="limit-badge">⏱ ${l.tlMin} min</div>`:''}`;
+    btn.onclick=()=>openLessonConfig(i);
+    grid.appendChild(btn);
+  }
+}
+function openLessonConfig(num){
+  S.pendingLesson=num;
+  const l=(S.lessons[S.classId]||[]).find(x=>x.lessonNum===num);
+  document.getElementById('modal-lesson-h').textContent=`Leçon ${num}`;
+  document.getElementById('input-timelimit').value=l?(l.tlMin||0):0;
+  openModal('modal-lesson');
+}
+function saveLessonConfig(){
+  const tl=parseInt(document.getElementById('input-timelimit').value)||0;
+  if(!S.lessons[S.classId])S.lessons[S.classId]=[];
+  let l=S.lessons[S.classId].find(x=>x.lessonNum===S.pendingLesson);
+  if(!l){ l={id:'l_'+Date.now(),lessonNum:S.pendingLesson,groups:[],results:{},tlMin:0}; S.lessons[S.classId].push(l); }
+  l.tlMin=tl; S.lessonId=l.id; save(); closeModal('modal-lesson'); goTo('screen-groups');
+}
+
+// ══ GROUPES ══
+function renderGroups(){
+  const l=lesson(), cls=S.classes.find(c=>c.id===S.classId); if(!l||!cls)return;
+  document.getElementById('groups-title').textContent=`Leçon ${l.lessonNum}`;
+  document.getElementById('groups-sub').textContent=cls.name;
+
+  // Badge temps limite
+  const tlb=document.getElementById('tl-badge');
+  tlb.innerHTML=l.tlMin>0?`<span style="background:rgba(249,115,22,.15);border:1px solid var(--accent);color:var(--accent);font-size:12px;font-weight:700;padding:4px 10px;border-radius:8px;">⏱ ${l.tlMin} min</span>`:'';
+
+  const grid=document.getElementById('groups-grid');
+  if(!l.groups.length){
+    grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1;"><div class="big">👥</div><p>Aucun groupe.<br>Ajoutez des groupes.</p></div>`;
+    return;
+  }
+
+  const now = Date.now();
+  const ordered = sortedGroups(l);
+
+  grid.innerHTML = ordered.map(g => {
+    const run = g.running;
+    const elapsed = run ? now - g.startTime : 0;
+    const ot = run && isOT(elapsed, l); // rouge UNIQUEMENT si en cours ET dépassé
+    const res = l.results[g.id]||{};
+    const tot = Object.keys(res).length;
+
+    let cls2 = 'group-btn';
+    if(run) cls2 += ' running';
+    if(ot)  cls2 += ' overtime';
+
+    let body = '';
+    if(run){
+      body = `
+        <div class="g-status">Parcours ${g.parcoursId}</div>
+        <div class="g-timer" id="live-${g.id}">${fmt(elapsed)}</div>
+        <div class="g-hint">Tap → STOP</div>`;
+    } else {
+      body = `
+        <div class="g-status">${tot} parcours réalisé${tot!==1?'s':''}</div>
+        <div class="g-hint">Tap → choisir parcours</div>`;
+    }
+
+    return `<div class="${cls2}" onclick="clickGroup('${g.id}')">
+      <div class="g-name">${esc(g.name)}</div>
+      ${body}
+    </div>`;
+  }).join('');
+
+  if(l.groups.some(g=>g.running)) startLiveTimers();
+}
+
+function startLiveTimers(){
+  clearInterval(liveIv);
+  liveIv = setInterval(()=>{
+    const l=lesson(); if(!l)return;
+    const running=l.groups.filter(g=>g.running);
+    if(!running.length){ clearInterval(liveIv); return; }
+
+    let needReorder = false;
+    running.forEach(g=>{
+      const el=Date.now()-g.startTime, s=fmt(el), ot=isOT(el,l);
+      // Si un groupe vient de passer en overtime → réordonner
+      const btn = document.querySelector(`[onclick="clickGroup('${g.id}')"]`);
+      if(btn && ot && !btn.classList.contains('overtime')){
+        needReorder = true;
+      }
+      const timerEl = document.getElementById('live-'+g.id);
+      if(timerEl) timerEl.textContent = s;
+    });
+
+    if(needReorder){
+      renderGroups(); // réaffiche avec le bon ordre
+    }
+  }, 200);
+}
+
+function clickGroup(gid){
+  const l=lesson(); if(!l)return;
+  const g=l.groups.find(x=>x.id===gid); if(!g)return;
+  S.groupId=gid;
+  if(g.running) openStopModal(g);
+  else goTo('screen-parcours');
+}
+
+function openStopModal(g){
+  const l=lesson(), el=Date.now()-g.startTime, ot=isOT(el,l);
+  S.parcoursId=g.parcoursId;
+  document.getElementById('modal-stop-time').textContent=fmt(el);
+  document.getElementById('modal-stop-time').className='chrono-display'+(ot?' ot':'');
+  document.getElementById('modal-stop-info').textContent=`Groupe : ${g.name} — Parcours ${g.parcoursId}`;
+  document.getElementById('modal-stop-ot').style.display=ot?'block':'none';
+  openModal('modal-stop');
+}
+
+// ══ GROUPES CRUD ══
+function openAddGroup(){
+  const l=lesson(); if(!l||l.groups.length>=30){alert('Maximum 30 groupes.');return;}
+  document.getElementById('input-group').value=''; openModal('modal-group');
+  setTimeout(()=>document.getElementById('input-group').focus(),300);
+}
+function saveGroup(){
+  const n=document.getElementById('input-group').value.trim(); if(!n)return;
+  const l=lesson(); if(!l)return;
+  l.groups.push({id:'g_'+Date.now(),name:n,running:false,startTime:null,parcoursId:null});
+  save(); closeModal('modal-group'); renderGroups();
+}
+document.getElementById('input-group').addEventListener('keydown',e=>{if(e.key==='Enter')saveGroup();});
+
+// ══ PARCOURS ══
+function renderParcours(){
+  const l=lesson(), g=l&&l.groups.find(x=>x.id===S.groupId); if(!g)return;
+  document.getElementById('parcours-title').textContent=g.name;
+  const res=l.results[g.id]||{}, grid=document.getElementById('parcours-grid');
+  grid.innerHTML='';
+  for(let i=1;i<=30;i++){
+    const done=res[i]!==undefined, ot=done&&isOT(res[i],l);
+    const btn=document.createElement('div');
+    btn.className='parcours-btn'+(done?' done':'')+(ot?' ot':'');
+    btn.innerHTML=`<div>Parcours ${i}</div>${done?`<div style="font-size:11px;margin-top:3px;">${fmt(res[i])}</div>`:''}`;
+    btn.onclick=()=>chooseParcours(i);
+    grid.appendChild(btn);
+  }
+}
+function chooseParcours(pid){
+  S.parcoursId=pid;
+  const l=lesson(), g=l&&l.groups.find(x=>x.id===S.groupId); if(!g)return;
+  document.getElementById('chrono-group').textContent=g.name;
+  document.getElementById('chrono-parcours').textContent='Parcours '+pid;
+  document.getElementById('chrono-display').textContent='00:00.0';
+  document.getElementById('chrono-display').className='chrono-display';
+  document.getElementById('chrono-label').textContent='Prêt à démarrer';
+  document.getElementById('btn-start').style.display='block';
+  document.getElementById('btn-stop').style.display='none';
+  document.getElementById('chrono-back').onclick=()=>goTo('screen-parcours');
+  goTo('screen-chrono');
+}
+
+// ══ CHRONO ══
+function startChrono(){
+  const l=lesson(), g=l&&l.groups.find(x=>x.id===S.groupId); if(!g)return;
+  g.running=true; g.startTime=Date.now(); g.parcoursId=S.parcoursId;
+  save();
+  goTo('screen-groups'); // retour auto
+}
+function stopChrono(){
+  const l=lesson(), g=l&&l.groups.find(x=>x.id===S.groupId); if(!g)return;
+  openStopModal(g);
+}
+function confirmStop(){
+  const l=lesson(), g=l&&l.groups.find(x=>x.id===S.groupId); if(!g)return;
+  const el=Date.now()-g.startTime;
+  g.running=false;
+  if(!l.results[g.id])l.results[g.id]={};
+  l.results[g.id][S.parcoursId]=el;
+  g.startTime=null; g.parcoursId=null;
+  save(); closeModal('modal-stop'); renderGroups();
+}
+
+// ══ FIN DE LEÇON ══
+function finLecon(){
+  const l=lesson(); if(!l)return;
+  l.groups.filter(g=>g.running).forEach(g=>{
+    const el=Date.now()-g.startTime;
+    if(!l.results[g.id])l.results[g.id]={};
+    l.results[g.id][g.parcoursId]=el;
+    g.running=false; g.startTime=null; g.parcoursId=null;
+  });
+  save(); goTo('screen-recap');
+}
+
+// ══ RÉCAP ══
+function renderRecap(){
+  const l=lesson(), cls=S.classes.find(c=>c.id===S.classId); if(!l||!cls)return;
+  const lbl=l.tlMin>0?` — Limite : ${l.tlMin} min`:'';
+  document.getElementById('recap-sub').textContent=`${cls.name} — Leçon ${l.lessonNum}${lbl}`;
+  if(!l.groups.length){
+    document.getElementById('recap-container').innerHTML='<div class="empty-state"><div class="big">📊</div><p>Aucune donnée disponible.</p></div>';
+    return;
+  }
+  const pu=new Set();
+  l.groups.forEach(g=>Object.keys(l.results[g.id]||{}).forEach(p=>pu.add(parseInt(p))));
+  const pl=pu.size>0?[...pu].sort((a,b)=>a-b):Array.from({length:5},(_,i)=>i+1);
+
+  const anyOT=l.tlMin>0&&l.groups.some(g=>Object.values(l.results[g.id]||{}).some(ms=>isOT(ms,l)));
+  let html='';
+  if(anyOT) html+=`<div class="alert-ot" style="margin-bottom:14px;">⚠️ Les lignes en rouge dépassent la limite de ${l.tlMin} min</div>`;
+
+  html+=`<div class="recap-wrap"><table class="recap-table"><thead><tr><th>Groupe</th>${pl.map(p=>`<th>P${p}</th>`).join('')}</tr></thead><tbody>`;
+  l.groups.forEach(g=>{
+    const res=l.results[g.id]||{};
+    const gOT=l.tlMin>0&&Object.values(res).some(ms=>isOT(ms,l)); // rouge dans récap si dépassé
+    html+=`<tr><td>${esc(g.name)}</td>`;
+    pl.forEach(p=>{
+      if(res[p]!==undefined){ const ot=isOT(res[p],l); html+=`<td class="${ot?'t-ot':'t-ok'}">${fmt(res[p])}</td>`; }
+      else html+=`<td class="t-no">—</td>`;
+    });
+    html+=`</tr>`;
+  });
+  html+=`</tbody></table></div>`;
+  document.getElementById('recap-container').innerHTML=html;
+}
+
+function exportRecap(){
+  const l=lesson(), cls=S.classes.find(c=>c.id===S.classId); if(!l||!cls)return;
+  const pu=new Set(); l.groups.forEach(g=>Object.keys(l.results[g.id]||{}).forEach(p=>pu.add(parseInt(p))));
+  const pl=[...pu].sort((a,b)=>a-b);
+  let txt=`Suivi CO — ${cls.name} — Leçon ${l.lessonNum}\n`;
+  if(l.tlMin>0)txt+=`Temps limite : ${l.tlMin} min\n`;
+  txt+=`\nGroupe\t${pl.map(p=>'Parcours '+p).join('\t')}\n`;
+  l.groups.forEach(g=>{ const r=l.results[g.id]||{}; txt+=`${g.name}\t${pl.map(p=>r[p]!==undefined?fmt(r[p]):'—').join('\t')}\n`; });
+  try{ navigator.clipboard.writeText(txt).then(()=>alert('Copié !')); }catch(e){ alert(txt); }
+}
+
+function doReset(){
+  const l=lesson(); if(!l)return;
+  l.groups=[]; l.results={}; save(); closeModal('modal-reset'); goTo('screen-groups');
+}
+
+load(); renderHome();
+</script>
+</body>
+</html>
